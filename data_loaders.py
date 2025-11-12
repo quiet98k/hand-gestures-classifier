@@ -1,36 +1,3 @@
-"""Data loading utilities for hand gesture landmark annotations.
-
-This module implements a simple PyTorch Dataset that reads landmark-only
-annotations from JSON files under `data/annotations/{train,val,test}`.
-
-Each JSON file contains a dict of annotation objects keyed by an ID. Example
-object structure (irrelevant keys omitted):
-
-{
-	"some-uuid": {
-		"bboxes": [[x, y, w, h], ...],          # one per detected hand
-		"labels": ["gesture_label", ...],      # one per detected hand
-		"hand_landmarks": [                     # one list per hand
-			[[x0, y0], [x1, y1], ...],            # landmarks for hand 0
-			[[x0, y0], [x1, y1], ...]             # landmarks for hand 1
-		]
-	}
-}
-
-Dataset item granularity: one hand per sample (NOT one person). If an object
-has two hands we create two samples. Any label in `exclude_labels` is skipped.
-
-Returned sample dict contains (landmarks are normalized to the bounding box
-and clamped to [0,1]):
-	- landmarks: FloatTensor shape (N_landmarks, 2) each coordinate in [0,1]
-	  relative to its hand bbox (x,y offset removed, width/height scaled)
-	- bbox: FloatTensor shape (4,) in [x, y, w, h] normalized to image dims
-	- label: int class index
-	- label_str: original string label
-
-Keep it intentionally minimal / non-opinionated so you can extend later.
-"""
-
 from __future__ import annotations
 
 import json
