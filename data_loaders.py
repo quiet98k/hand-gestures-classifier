@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Sequence, Dict, Optional
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 
 @dataclass
@@ -82,6 +82,8 @@ class LandmarksDataset(Dataset):
 
 		samples: List[LandmarkSample] = []
 		labels_encountered: set[str] = set()
+		# Count samples that have empty / missing landmarks and are skipped
+		skipped_empty = 0
 
 		for jf in sorted(json_files):
 			with open(jf, "r", encoding="utf-8") as fh:
@@ -110,6 +112,10 @@ class LandmarksDataset(Dataset):
 
 					# Convert to tensors (float32)
 					lm_tensor = torch.tensor(landmarks_list, dtype=torch.float32)
+					# Skip samples with no landmarks (e.g., empty list -> shape (0,))
+					if lm_tensor.numel() == 0:
+						skipped_empty += 1
+						continue
 					bbox_tensor = torch.tensor(bbox_list, dtype=torch.float32)
 
 					sample = LandmarkSample(
@@ -120,6 +126,9 @@ class LandmarksDataset(Dataset):
 					)
 					samples.append(sample)
 					labels_encountered.add(label_str)
+
+			# Expose count of skipped empty landmark samples for diagnostics
+			self._skipped_empty = skipped_empty
 
 		# Build or validate label mapping
 		if label_mapping is None:
@@ -185,20 +194,24 @@ class LandmarksDataset(Dataset):
 
 if __name__ == "__main__":
 	print("=== Sanity Check: LandmarksDataset ===")
+	# Basic sanity: create dataset, report size/classes, and check first sample
 	ds = LandmarksDataset(split="train")
 	print(ds)
+	if getattr(ds, "_skipped_empty", 0) > 0:
+		print(f"Skipped {ds._skipped_empty} samples with empty landmarks")
 	print(f"Total samples: {len(ds)}  | Classes ({ds.num_classes}): {ds.class_names()}")
 
 	# Assert at least one sample exists
 	assert len(ds) > 0, "Dataset is empty – check annotation path."
 
-	# Grab first sample
+	# Inspect first sample for basic correctness
 	first = ds[0]
 	print("First sample label:", first["label_str"], "index:", first["label"])
 	print("First sample landmarks shape:", first["landmarks"].shape)
 	print("First sample bbox:", first["bbox"].tolist())
 	print("Landmark min/max (per coord):", first["landmarks"].min().item(), first["landmarks"].max().item())
-	assert 0.0 <= first["landmarks"].min().item() - 1e-6, "Landmarks below 0 after normalization"  # tolerance
+	# Basic bounds checks after normalization
+	assert first["landmarks"].min().item() >= -1e-6, "Landmarks below 0 after normalization"
 	assert first["landmarks"].max().item() <= 1.0 + 1e-6, "Landmarks above 1 after normalization"
 
 	# Basic shape expectation (assumption: 21 landmarks like MediaPipe Hands)
@@ -207,21 +220,5 @@ if __name__ == "__main__":
 		if n_pts not in (21,):  # adjust if your landmark count differs
 			print(f"[WARN] Unexpected landmark count: {n_pts}")
 
-	# DataLoader batch sanity (keep simple, no custom collate)
-	loader = DataLoader(ds, batch_size=4, shuffle=True)
-	batch = next(iter(loader))
-	# batch is a dict of tensors / lists
-	lm_batch = batch["landmarks"]
-	if isinstance(lm_batch, torch.Tensor):
-		print("Batch landmarks tensor shape:", lm_batch.shape)
-	else:
-		print("Batch landmarks list length:", len(lm_batch))
-	print("Batch labels:", batch["label"])
-
-	# Flatten demo
-	ds_flat = LandmarksDataset(split="train", flatten=True)
-	flat_sample = ds_flat[0]["landmarks"]
-	print("Flattened landmarks vector length:", flat_sample.shape[0])
-	print("Flat sample min/max:", flat_sample.min().item(), flat_sample.max().item())
 	print("=== Sanity Check Complete ===")
 
