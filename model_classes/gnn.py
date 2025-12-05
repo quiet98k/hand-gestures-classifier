@@ -135,6 +135,49 @@ class GNN(nn.Module):
         # Classification
         return self.classifier(x)
 
+    def get_features(
+        self,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        batch: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Extract features before the classifier head.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Node feature matrix of shape (num_nodes, in_channels).
+        edge_index : torch.Tensor
+            Edge index of shape (2, num_edges).
+        batch : Optional[torch.Tensor]
+            Batch assignment vector of shape (num_nodes,).
+
+        Returns
+        -------
+        torch.Tensor
+            Feature embeddings of shape (batch_size, hidden_channels).
+        """
+        if batch is None:
+            batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
+
+        # GCN layers
+        for conv, norm in zip(self.convs, self.norms):
+            x = conv(x, edge_index)
+            x = norm(x)
+            x = self.act(x)
+            if self.dropout_rate > 0:
+                x = F.dropout(x, p=self.dropout_rate, training=self.training)
+
+        # Global mean pooling
+        x = global_mean_pool(x, batch)
+
+        return x
+
+    @property
+    def feature_dim(self) -> int:
+        """Return the dimension of the feature embeddings."""
+        return self.hidden_channels
+
 
 def create_gnn(
     in_channels: int = 2,

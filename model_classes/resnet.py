@@ -205,6 +205,46 @@ class ResNet34(nn.Module):
         x = self.fc(x)
         return x
 
+    def get_features(self, x: torch.Tensor) -> torch.Tensor:
+        """Extract features before the classifier head.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input images of shape (B, C, H, W).
+
+        Returns
+        -------
+        torch.Tensor
+            Feature embeddings of shape (B, 512).
+        """
+        if x.dim() != 4:
+            raise ValueError(f"Input must be 4D (B, C, H, W); got shape {tuple(x.shape)}")
+        if x.size(1) != self.input_channels:
+            raise ValueError(
+                f"Expected channel dimension {self.input_channels}; got {x.size(1)}"
+            )
+
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.dropout(x)
+        return x
+
+    @property
+    def feature_dim(self) -> int:
+        """Return the dimension of the feature embeddings."""
+        return 512
+
 
 def create_resnet34(
     input_channels: int = 3,
