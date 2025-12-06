@@ -42,9 +42,6 @@ cd hand-gestures-classifier
 
 # Install dependencies using uv (recommended)
 uv sync
-
-# Or using pip
-pip install -e .
 ```
 
 **Requirements:**
